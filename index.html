@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShortVP</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎬</text></svg>">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; overflow-x: hidden; }
+        .container { min-height: 100vh; display: flex; flex-direction: column; }
+        .player-section { height: 80vh; transition: height 0.3s ease; position: relative; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.3); border-radius: 20px; margin: 10px; overflow: hidden; }
+        .player-section.fullscreen { height: 100vh; margin: 0; border-radius: 0; position: fixed; top: 0; left: 0; width: 100vw; z-index: 1000; }
+        .video-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: relative; }
+        .player-wrapper { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; transition: opacity 0.5s ease-in-out; }
+        video { max-width: 100%; max-height: 100%; border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); background-color: transparent; }
+        .add-button { width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(145deg, #667eea 0%, #764ba2 100%); border: none; color: white; font-size: 24px; font-weight: bold; cursor: pointer; transition: all 0.3s ease, opacity 0.5s ease; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3); display: flex; align-items: center; justify-content: center; z-index: 10; opacity: 1; }
+        .add-button:hover { transform: translateY(-5px); box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4); }
+        .add-button:active { transform: translateY(-2px); }
+        .add-button.hidden-visual { opacity: 0; pointer-events: none; }
+        .controls { padding: 20px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border-radius: 15px; margin: 10px; }
+        .control-btn { width: 60px; height: 60px; border-radius: 50%; border: none; background: linear-gradient(145deg, #4facfe 0%, #00f2fe 100%); color: white; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); position: relative; display: flex; align-items: center; justify-content: center; }
+        .help-btn { width: 45px !important; height: 45px !important; font-size: 14px !important; margin-left: 20px; background: linear-gradient(145deg, #6c757d 0%, #495057 100%) !important; }
+        .help-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 2000; }
+        .help-content { background: rgba(40, 40, 40, 0.95); padding: 30px; border-radius: 15px; max-width: 500px; text-align: left; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3); }
+        .help-content h3 { color: #eee; margin-bottom: 20px; text-align: center; font-size: 24px; }
+        .help-content p { color: #ccc; margin-bottom: 10px; font-size: 16px; display: flex; justify-content: space-between; align-items: center; padding: 5px 0; }
+        .help-content .key { background: rgba(80, 80, 80, 0.9); padding: 4px 10px; border-radius: 6px; font-family: monospace; font-weight: bold; color: #fff; cursor: pointer; border: 1px solid transparent; transition: all 0.2s ease; }
+        .help-content .key:hover { border-color: #4facfe; background: rgba(100, 100, 100, 0.9); }
+        .help-content .key.editing { color: #ffc107; background: #000; border-color: #ffc107; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.5; } }
+        .help-close { background: linear-gradient(145deg, #4facfe 0%, #00f2fe 100%); border: none; padding: 10px 20px; border-radius: 8px; color: white; cursor: pointer; margin: 20px auto 0; display: block; font-weight: bold; }
+        .control-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3); }
+        .control-btn.active { background: linear-gradient(145deg, #ff6b6b 0%, #ee5a24 100%); box-shadow: 0 0 20px rgba(255, 107, 107, 0.5); }
+        .control-btn.delete-active { background: linear-gradient(145deg, #ff3838 0%, #cc0000 100%); animation: pulse 0.5s ease-in-out; }
+        .nav-btn { background: linear-gradient(145deg, #43cea2 0%, #185a9d 100%); }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+        .drag-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(79, 172, 254, 0.3); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; z-index: 100; border-radius: 20px; }
+        .drag-overlay.active { display: flex; }
+        .file-info { position: absolute; top: 20px; left: 20px; background: rgba(0, 0, 0, 0.7); padding: 10px 15px; border-radius: 10px; font-size: 14px; display: none; z-index: 10; }
+        .file-info.show { display: block; }
+        input[type="file"] { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="player-section" id="playerSection">
+            <div class="video-container" id="videoContainer">
+                <button class="add-button" id="addButton">ADD</button>
+                <div class="player-wrapper" id="playerWrapper1">
+                    <video id="videoPlayer1" preload="auto" playsinline></video>
+                </div>
+                <div class="player-wrapper" id="playerWrapper2" style="opacity: 0;">
+                    <video id="videoPlayer2" preload="auto" playsinline></video>
+                </div>
+            </div>
+            <div class="drag-overlay" id="dragOverlay"></div>
+            <div class="file-info" id="fileInfo">
+                <div id="fileName">File: -</div>
+                <div id="fileIndex">- / -</div>
+            </div>
+        </div>
+
+        <div class="controls" id="controls">
+            <button class="control-btn nav-btn" id="prevBtn" title="Previous (←)">⏮️</button>
+            <button class="control-btn" id="loopBtn" title="Loop (L)">🔄</button>
+            <button class="control-btn" id="repeatBtn" title="Repeat (R)">📌</button>
+            <button class="control-btn" id="crossfadeBtn" title="Toggle Crossfade (C)">✖️</button>
+            <button class="control-btn" id="speedUpBtn" title="Speed Up (=)">⏩</button>
+            <button class="control-btn" id="speedDownBtn" title="Speed Down (-)">⏪</button>
+            <button class="control-btn" id="delBtn" title="Delete (Del)">🗑️</button>
+            <button class="control-btn nav-btn" id="nextBtn" title="Next (→)">⏭️</button>
+            <button class="control-btn help-btn" id="helpBtn" title="Help (H)">❓</button>
+        </div>
+    </div>
+
+    <input type="file" id="fileInput" multiple accept="video/*,image/gif">
+
+    <div class="help-modal" id="helpModal"></div>
+
+    <script>
+        class VideoPlayer {
+            constructor() {
+                this.files = [];
+                this.currentIndex = 0;
+                this.activePlayerIndex = 0;
+                this.isTransitioning = false;
+                this.isCrossfadeEnabled = true;
+
+                this.isInfiniteLoop = false;
+                this.repeatState = 0;
+                this.repeatLabels = ['R2', 'R3', 'R5'];
+                this.repeatValues = [2, 3, 5];
+                this.repeatCount = 0;
+                
+                this.speedUpState = 0;
+                this.speedDownState = 0;
+                this.speedUpValues = [1.0, 1.1, 1.25, 1.5, 2.0, 3.0, 5.0, 10.0, 20.0];
+                this.speedDownValues = [1.0, 0.9, 0.75, 0.5, 0.33, 0.2, 0.1, 0.05, 0.025];
+                this.speedUpLabels = ['⏩', '+10%', '+25%', '+50%', 'x2', 'x3', 'x5', 'x10', 'x20'];
+                this.speedDownLabels = ['⏪', '-10%', '-25%', '-50%', '/3', '/5', '/10', '/20', '/40'];
+                
+                this.isFullscreen = false;
+                this.volume = 0.25;
+                this.isShiftDown = false;
+                this.originalSpeed = 1.0;
+                this.actionToRebind = null;
+
+                // Centralized hotkey management, using event.code for layout independence
+                this.hotkeyActions = {
+                    addFiles:       { code: 'KeyA', key: 'a', label: 'Add File(s)', func: () => this.fileInput.click() },
+                    togglePlayPause:{ code: 'Space', key: ' ', label: 'Play / Pause', func: this.togglePlayPause.bind(this) },
+                    nextVideo:      { code: 'ArrowRight', key: 'arrowright', label: 'Next Video', func: this.nextVideo.bind(this) },
+                    prevVideo:      { code: 'ArrowLeft', key: 'arrowleft', label: 'Previous Video', func: this.previousVideo.bind(this) },
+                    volumeUp:       { code: 'ArrowUp', key: 'arrowup', label: 'Volume Up', func: this.volumeUp.bind(this) },
+                    volumeDown:     { code: 'ArrowDown', key: 'arrowdown', label: 'Volume Down', func: this.volumeDown.bind(this) },
+                    deleteFile:     { code: 'Delete', key: 'delete', label: 'Delete Current', func: this.deleteCurrentFile.bind(this) },
+                    toggleCrossfade:{ code: 'KeyC', key: 'c', label: 'Toggle Crossfade', func: this.toggleCrossfade.bind(this) },
+                    toggleLoop:     { code: 'KeyL', key: 'l', label: 'Toggle Infinite Loop', func: this.toggleLoop.bind(this) },
+                    toggleRepeat:   { code: 'KeyR', key: 'r', label: 'Cycle Repeats', func: this.toggleRepeat.bind(this) },
+                    speedUp:        { code: 'Equal', key: '=', label: 'Faster', func: this.toggleSpeedUp.bind(this) },
+                    speedDown:      { code: 'Minus', key: '-', label: 'Slower', func: this.toggleSpeedDown.bind(this) },
+                    toggleFullscreen:{ code: 'KeyF', key: 'f', label: 'Toggle Fullscreen', func: this.toggleFullscreen.bind(this) },
+                    exitFullscreen: { code: 'Escape', key: 'escape', label: 'Exit Fullscreen', func: this.exitFullscreen.bind(this) },
+                    toggleHelp:     { code: 'KeyH', key: 'h', label: 'Show This Help', func: this.toggleHelpModal.bind(this) }
+                };
+                
+                this.initElements();
+                this.initEventListeners();
+                this.createClickSound();
+            }
+            
+            initElements() {
+                this.playerSection = document.getElementById('playerSection');
+                this.addButton = document.getElementById('addButton');
+                this.dragOverlay = document.getElementById('dragOverlay');
+                this.fileInfo = document.getElementById('fileInfo');
+                this.fileInput = document.getElementById('fileInput');
+                this.controls = document.getElementById('controls');
+                this.players = [
+                    { wrapper: document.getElementById('playerWrapper1'), video: document.getElementById('videoPlayer1') },
+                    { wrapper: document.getElementById('playerWrapper2'), video: document.getElementById('videoPlayer2') }
+                ];
+                this.prevBtn = document.getElementById('prevBtn');
+                this.loopBtn = document.getElementById('loopBtn');
+                this.repeatBtn = document.getElementById('repeatBtn');
+                this.crossfadeBtn = document.getElementById('crossfadeBtn');
+                this.speedUpBtn = document.getElementById('speedUpBtn');
+                this.speedDownBtn = document.getElementById('speedDownBtn');
+                this.delBtn = document.getElementById('delBtn');
+                this.nextBtn = document.getElementById('nextBtn');
+                this.helpBtn = document.getElementById('helpBtn');
+                this.helpModal = document.getElementById('helpModal');
+                this.crossfadeBtn.classList.add('active');
+            }
+
+            getActivePlayer() { return this.players[this.activePlayerIndex]; }
+            getStandbyPlayer() { return this.players[1 - this.activePlayerIndex]; }
+            
+            initEventListeners() {
+                this.addButton.addEventListener('click', () => { this.fileInput.click(); this.clickSound(); });
+                this.fileInput.addEventListener('change', (e) => this.handleFiles(e.target.files));
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eName => this.playerSection.addEventListener(eName, e => { e.preventDefault(); e.stopPropagation(); }, false));
+                ['dragenter', 'dragover'].forEach(eName => this.playerSection.addEventListener(eName, () => this.dragOverlay.classList.add('active')));
+                ['dragleave', 'drop'].forEach(eName => this.playerSection.addEventListener(eName, () => this.dragOverlay.classList.remove('active')));
+                this.playerSection.addEventListener('drop', (e) => {
+                    const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('video/') || f.type === 'image/gif');
+                    if (files.length > 0) this.handleFiles(files); else alert('❌ No video files found.');
+                });
+                this.players.forEach((p, i) => {
+                    p.video.addEventListener('ended', () => this.handleVideoEnd(i));
+                    p.video.addEventListener('timeupdate', (e) => this.handleTimeUpdate(e, i));
+                    p.video.addEventListener('loadedmetadata', () => this.prepareVideo(i));
+                });
+                this.prevBtn.addEventListener('click', () => { this.clickSound(); this.previousVideo(); });
+                this.nextBtn.addEventListener('click', () => { this.clickSound(); this.nextVideo(); });
+                this.loopBtn.addEventListener('click', () => this.toggleLoop());
+                this.repeatBtn.addEventListener('click', () => this.toggleRepeat());
+                this.crossfadeBtn.addEventListener('click', () => this.toggleCrossfade());
+                this.speedUpBtn.addEventListener('click', () => this.toggleSpeedUp());
+                this.speedDownBtn.addEventListener('click', () => this.toggleSpeedDown());
+                this.delBtn.addEventListener('click', () => this.deleteCurrentFile());
+                this.helpBtn.addEventListener('click', () => { this.clickSound(); this.toggleHelpModal(); });
+                document.addEventListener('keydown', (e) => this.handleKeydown(e));
+                document.addEventListener('keyup', (e) => this.handleKeyup(e));
+            }
+            
+            handleFiles(fileList) {
+                this.files = Array.from(fileList);
+                if (this.files.length > 0) {
+                    this.currentIndex = 0;
+                    this.showVideoPlayer();
+                    this.loadVideoIntoPlayer(this.getActivePlayer(), this.files[0]);
+                    if (this.files.length > 1) {
+                        this.loadVideoIntoPlayer(this.getStandbyPlayer(), this.files[1]);
+                    }
+                }
+            }
+            
+            loadVideoIntoPlayer(player, file) {
+                if (!file) return;
+                const url = URL.createObjectURL(file);
+                if (player.video.src) URL.revokeObjectURL(player.video.src);
+                player.video.src = url;
+                player.video.volume = this.volume;
+                player.video.load();
+            }
+
+            handleTimeUpdate(event, playerIndex) {
+                if (!this.isCrossfadeEnabled || playerIndex !== this.activePlayerIndex || this.isTransitioning || this.files.length < 2 || this.isInfiniteLoop || this.repeatState > 0) return;
+                const video = event.target;
+                if (video.duration > 0.5 && (video.duration - video.currentTime <= 0.5)) {
+                    this.transitionToNext();
+                }
+            }
+            
+            handleVideoEnd(playerIndex) {
+                if (playerIndex !== this.activePlayerIndex) return;
+                // Do not auto-advance if shift is held down, keyup will handle it.
+                if(this.isShiftDown) return;
+
+                let maxRepeats = 1;
+                if (this.isInfiniteLoop) maxRepeats = Infinity;
+                else if (this.repeatState > 0) maxRepeats = this.repeatValues[this.repeatState - 1];
+                this.repeatCount++;
+                if (this.repeatCount < maxRepeats) {
+                    this.getActivePlayer().video.currentTime = 0;
+                    this.getActivePlayer().video.play();
+                    return;
+                }
+                if (this.isTransitioning) return;
+                if (this.isCrossfadeEnabled) this.transitionToNext();
+                else this.simpleNextVideo();
+            }
+
+            transitionToNext() {
+                if (this.isTransitioning || this.files.length < 2) return;
+                this.isTransitioning = true;
+                const fadingOutPlayer = this.getActivePlayer();
+                const fadingInPlayer = this.getStandbyPlayer();
+                fadingOutPlayer.wrapper.style.opacity = '0';
+                fadingInPlayer.wrapper.style.opacity = '1';
+                fadingInPlayer.video.play();
+                this.activePlayerIndex = 1 - this.activePlayerIndex;
+                this.currentIndex = (this.currentIndex + 1) % this.files.length;
+                this.updateFileInfo();
+                this.resetVideoStates();
+                this.updatePlaybackRate();
+                setTimeout(() => {
+                    const nextFileIndex = (this.currentIndex + 1) % this.files.length;
+                    if (this.files.length > 1) this.loadVideoIntoPlayer(fadingOutPlayer, this.files[nextFileIndex]);
+                }, 500);
+                setTimeout(() => { this.isTransitioning = false; }, 500);
+            }
+
+            simpleNextVideo() {
+                if (this.files.length < 2 && !this.isInfiniteLoop && this.repeatState === 0) {
+                     this.getActivePlayer().video.currentTime = 0; // Replay single video if no loop/repeat
+                     this.getActivePlayer().video.play();
+                     return;
+                }
+                this.currentIndex = (this.currentIndex + 1) % this.files.length;
+                this.loadVideoIntoPlayer(this.getActivePlayer(), this.files[this.currentIndex]);
+                this.updateFileInfo();
+                this.resetVideoStates();
+            }
+
+            nextVideo() {
+                if (this.files.length === 0) return;
+                if (this.isCrossfadeEnabled) this.transitionToNext(); else this.simpleNextVideo();
+            }
+            
+            previousVideo() { 
+                if (this.files.length === 0) return;
+                this.isTransitioning = false; 
+                this.currentIndex = (this.currentIndex - 1 + this.files.length) % this.files.length;
+                this.loadVideoIntoPlayer(this.getActivePlayer(), this.files[this.currentIndex]); 
+                const nextFileIndex = (this.currentIndex + 1) % this.files.length;
+                this.loadVideoIntoPlayer(this.getStandbyPlayer(), this.files[nextFileIndex]);
+                this.getActivePlayer().wrapper.style.opacity = 1; 
+                this.getStandbyPlayer().wrapper.style.opacity = 0;
+                this.updateFileInfo();
+                this.resetVideoStates();
+            }
+
+            toggleCrossfade() {
+                this.clickSound();
+                this.isCrossfadeEnabled = !this.isCrossfadeEnabled;
+                this.crossfadeBtn.classList.toggle('active', this.isCrossfadeEnabled);
+            }
+
+            togglePlayPause() {
+                const player = this.getActivePlayer();
+                if (player.video.paused) player.video.play(); else player.video.pause();
+            }
+
+            volumeUp() { this.volume = Math.min(1.0, this.volume + 0.05); this.applyVolume(); }
+            volumeDown() { this.volume = Math.max(0.0, this.volume - 0.05); this.applyVolume(); }
+            applyVolume() { this.players.forEach(p => p.video.volume = this.volume); }
+
+            createClickSound() { try { this.audioContext = new (window.AudioContext || window.webkitAudioContext)(); this.clickSound = () => { const o = this.audioContext.createOscillator(), g = this.audioContext.createGain(); o.connect(g); g.connect(this.audioContext.destination); o.frequency.setValueAtTime(200, this.audioContext.currentTime); o.frequency.exponentialRampToValueAtTime(100, this.audioContext.currentTime + 0.1); g.gain.setValueAtTime(0.05, this.audioContext.currentTime); g.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.1); o.start(); o.stop(this.audioContext.currentTime + 0.1); }; } catch (e) { this.clickSound = () => {}; } }
+            prepareVideo(playerIndex) { if (playerIndex === this.activePlayerIndex) { this.players[playerIndex].video.play().catch(e => {}); } }
+            showVideoPlayer() { this.addButton.classList.add('hidden-visual'); this.fileInfo.classList.add('show'); this.updateFileInfo(); }
+            hideVideoPlayer() { this.players.forEach(p => { p.video.pause(); if (p.video.src) URL.revokeObjectURL(p.video.src); p.video.src = ''; }); this.addButton.classList.remove('hidden-visual'); this.fileInfo.classList.remove('show'); }
+            updateFileInfo() { if (this.files.length === 0) return; const file = this.files[this.currentIndex]; document.getElementById('fileName').textContent = `File: ${file.name}`; document.getElementById('fileIndex').textContent = `${this.currentIndex + 1} / ${this.files.length}`; }
+            resetVideoStates() { this.repeatCount = 0; }
+            
+            toggleLoop() {
+                this.clickSound();
+                this.isInfiniteLoop = !this.isInfiniteLoop;
+                this.loopBtn.classList.toggle('active', this.isInfiniteLoop);
+                if (this.isInfiniteLoop) {
+                    this.repeatState = 0;
+                    this.repeatBtn.classList.remove('active');
+                    this.repeatBtn.textContent = 'R2';
+                }
+            }
+
+            toggleRepeat() {
+                this.clickSound();
+                this.repeatState = (this.repeatState + 1) % 4; // Cycles 0, 1, 2, 3
+                if (this.repeatState > 0) {
+                    this.repeatBtn.classList.add('active');
+                    this.repeatBtn.textContent = this.repeatLabels[this.repeatState - 1];
+                    this.isInfiniteLoop = false;
+                    this.loopBtn.classList.remove('active');
+                } else {
+                    this.repeatBtn.classList.remove('active');
+                    this.repeatBtn.textContent = 'R2';
+                }
+            }
+
+            updatePlaybackRate() {
+                if (this.isShiftDown) return;
+                let rate = 1.0;
+                if (this.speedUpState > 0) rate = this.speedUpValues[this.speedUpState];
+                else if (this.speedDownState > 0) rate = this.speedDownValues[this.speedDownState];
+                this.originalSpeed = rate; // Update original speed when changed by buttons
+                this.players.forEach(p => p.video.playbackRate = rate);
+                return rate;
+            }
+
+            toggleSpeedUp() { this.clickSound(); this.speedUpState = (this.speedUpState + 1) % this.speedUpValues.length; this.speedUpBtn.textContent = this.speedUpLabels[this.speedUpState]; this.speedUpBtn.classList.toggle('active', this.speedUpState > 0); if (this.speedUpState > 0) { this.speedDownState = 0; this.speedDownBtn.textContent = this.speedDownLabels[0]; this.speedDownBtn.classList.remove('active'); } this.updatePlaybackRate(); }
+            toggleSpeedDown() { this.clickSound(); this.speedDownState = (this.speedDownState + 1) % this.speedDownValues.length; this.speedDownBtn.textContent = this.speedDownLabels[this.speedDownState]; this.speedDownBtn.classList.toggle('active', this.speedDownState > 0); if (this.speedDownState > 0) { this.speedUpState = 0; this.speedUpBtn.textContent = this.speedUpLabels[0]; this.speedUpBtn.classList.remove('active'); } this.updatePlaybackRate(); }
+            
+            deleteCurrentFile() { if (this.files.length === 0) return; this.clickSound(); this.delBtn.classList.add('delete-active'); setTimeout(() => this.delBtn.classList.remove('delete-active'), 500); this.files.splice(this.currentIndex, 1); if (this.files.length === 0) { this.hideVideoPlayer(); return; } this.currentIndex %= this.files.length; this.loadVideoIntoPlayer(this.getActivePlayer(), this.files[this.currentIndex]); if (this.files.length > 1) { const nextFileIndex = (this.currentIndex + 1) % this.files.length; this.loadVideoIntoPlayer(this.getStandbyPlayer(), this.files[nextFileIndex]); } this.updateFileInfo(); }
+            toggleFullscreen() { this.isFullscreen = !this.isFullscreen; this.playerSection.classList.toggle('fullscreen', this.isFullscreen); this.controls.style.display = this.isFullscreen ? 'none' : 'flex'; }
+            exitFullscreen() { if (this.isFullscreen) this.toggleFullscreen(); }
+
+            toggleHelpModal() {
+                const isOpen = this.helpModal.style.display === 'flex';
+                if (isOpen) {
+                    this.helpModal.style.display = 'none';
+                } else {
+                    this.buildHelpModal();
+                    this.helpModal.style.display = 'flex';
+                }
+            }
+            
+            handleKeydown(e) {
+                if (this.actionToRebind) return;
+                if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                    if (!this.isShiftDown) {
+                        e.preventDefault();
+                        this.isShiftDown = true;
+                        // Store the current speed to restore it later
+                        this.originalSpeed = this.getActivePlayer().video.playbackRate;
+                        this.players.forEach(p => p.video.playbackRate = 5.0);
+                    }
+                    return;
+                }
+                if (e.target.tagName === 'INPUT') return;
+                const action = Object.values(this.hotkeyActions).find(a => a.code === e.code);
+                if (action) {
+                    e.preventDefault();
+                    action.func();
+                }
+            }
+
+            handleKeyup(e) {
+                if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                    e.preventDefault();
+                    if (!this.isShiftDown) return; // Prevent multiple triggers
+                    
+                    const activeVideo = this.getActivePlayer().video;
+                    const wasVideoEnded = activeVideo.ended;
+                    
+                    this.isShiftDown = false;
+                    this.players.forEach(p => p.video.playbackRate = this.originalSpeed);
+
+                    // If the video ended while sped up, manually trigger the next one
+                    if (wasVideoEnded) {
+                        this.handleVideoEnd(this.activePlayerIndex);
+                    }
+                }
+            }
+            
+            buildHelpModal() {
+                let html = `<div class="help-content"><h3>Hotkeys (Click to change)</h3>`;
+                const specialKeyNames = { ' ': 'Space', 'arrowright': '→', 'arrowleft': '←', 'arrowup': '↑', 'arrowdown': '↓', 'delete': 'Del', 'escape': 'Esc', '=': '=', '-': '-'};
+                for (const [actionName, actionObj] of Object.entries(this.hotkeyActions)) {
+                    const keyDisplay = specialKeyNames[actionObj.key] || actionObj.key.toUpperCase();
+                    html += `<p>${actionObj.label}<span class="key" data-action="${actionName}">${keyDisplay}</span></p>`;
+                }
+                 html += `<p>Speed Up (x5)<span class="key" style="cursor: not-allowed;">Hold Shift</span></p>`;
+                html += '<button class="help-close">Close</button></div>';
+                this.helpModal.innerHTML = html;
+                this.helpModal.querySelector('.help-close').addEventListener('click', () => this.toggleHelpModal());
+                this.helpModal.querySelector('.help-content').addEventListener('click', (e) => {
+                    if (e.target.classList.contains('key') && e.target.dataset.action) {
+                        this.startRebind(e.target);
+                    }
+                });
+            }
+
+            startRebind(keyElement) {
+                if (this.actionToRebind) return;
+                const actionName = keyElement.dataset.action;
+                this.actionToRebind = actionName;
+                const originalText = keyElement.textContent;
+                keyElement.textContent = '[...]';
+                keyElement.classList.add('editing');
+                const keydownHandler = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const newCode = e.code;
+                    const newKey = e.key.toLowerCase();
+                    const isCodeInUse = Object.entries(this.hotkeyActions).some(([name, action]) =>
+                        name !== actionName && action.code === newCode
+                    );
+                    if (isCodeInUse) {
+                        alert(`Key "${e.key}" is already in use. Please choose another.`);
+                        keyElement.textContent = originalText;
+                    } else {
+                        this.hotkeyActions[actionName].code = newCode;
+                        this.hotkeyActions[actionName].key = newKey;
+                        const specialKeyNames = { ' ': 'Space', 'arrowright': '→', 'arrowleft': '←', 'arrowup': '↑', 'arrowdown': '↓', 'delete': 'Del', 'escape': 'Esc', '=': '=', '-': '-'};
+                        keyElement.textContent = specialKeyNames[newKey] || newKey.toUpperCase();
+                    }
+                    keyElement.classList.remove('editing');
+                    this.actionToRebind = null;
+                    document.removeEventListener('keydown', keydownHandler, { capture: true });
+                };
+                document.addEventListener('keydown', keydownHandler, { capture: true });
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => new VideoPlayer());
+    </script>
+</body>
+</html>
